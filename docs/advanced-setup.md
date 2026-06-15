@@ -4,6 +4,9 @@ This guide is for users who want source builds, Bun workflows, provider profiles
 
 ## Install Options
 
+OpenClaude requires Node.js `>=22.0.0` for npm installs and runtime. Bun is
+only required when building or running from source.
+
 ### Option A: npm
 
 ```bash
@@ -12,7 +15,7 @@ npm install -g @gitlawb/openclaude@latest
 
 ### Option B: From source with Bun
 
-Use Bun `1.3.13` or newer for source builds on Windows. Older Bun versions can fail during `bun run build`.
+Use Bun `1.3.13` or newer for source builds. Older Bun versions can fail during `bun run build`.
 
 ```bash
 git clone https://github.com/Gitlawb/openclaude.git

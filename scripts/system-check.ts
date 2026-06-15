@@ -13,12 +13,26 @@ import {
 } from '../src/utils/providerDiscovery.js'
 import { DEFAULT_GEMINI_MODEL } from '../src/utils/providerProfile.js'
 import { redactUrlForDisplay } from '../src/utils/urlRedaction.js'
+import {
+  MIN_NODE_ENGINE_RANGE,
+  checkSupportedNodeVersion,
+} from '../src/utils/nodeRuntime.js'
 
 type CheckResult = {
   ok: boolean
   label: string
   detail?: string
 }
+
+type NodeExecutableVersionProbe =
+  | {
+    ok: true
+    version: string
+  }
+  | {
+    ok: false
+    detail: string
+  }
 
 type CliOptions = {
   json: boolean
@@ -89,18 +103,58 @@ export function formatReachabilityFailureDetail(
   return `${base}${bodySuffix} Hint: model alias "${request.requestedModel}" resolved to "${request.resolvedModel}", which this ChatGPT account does not currently allow. Try "codexplan" or another entitled Codex model.`
 }
 
-function checkNodeVersion(): CheckResult {
-  const raw = process.versions.node
-  const major = Number(raw.split('.')[0] ?? '0')
-  if (Number.isNaN(major)) {
-    return fail('Node.js version', `Could not parse version: ${raw}`)
+export function readNodeExecutableVersion(
+  spawn = spawnSync,
+): NodeExecutableVersionProbe {
+  const result = spawn('node', ['--version'], {
+    encoding: 'utf8',
+  })
+
+  if (result.error) {
+    return {
+      ok: false,
+      detail: `Unable to run \`node --version\`: ${result.error.message}. OpenClaude requires Node.js ${MIN_NODE_ENGINE_RANGE} on PATH.`,
+    }
   }
 
-  if (major < 20) {
-    return fail('Node.js version', `Detected ${raw}. Require >= 20.`)
+  if (result.status !== 0) {
+    const output = (result.stderr || result.stdout || '').trim()
+    const suffix = output ? `: ${output}` : `: exit code ${result.status ?? 'unknown'}`
+    return {
+      ok: false,
+      detail: `Unable to run \`node --version\`${suffix}. OpenClaude requires Node.js ${MIN_NODE_ENGINE_RANGE} on PATH.`,
+    }
   }
 
-  return pass('Node.js version', raw)
+  const version = (result.stdout || result.stderr || '').trim()
+  if (!version) {
+    return {
+      ok: false,
+      detail: `Unable to read Node.js version from \`node --version\`. OpenClaude requires Node.js ${MIN_NODE_ENGINE_RANGE} on PATH.`,
+    }
+  }
+
+  return {
+    ok: true,
+    version,
+  }
+}
+
+export function checkNodeVersion(
+  raw: string | NodeExecutableVersionProbe = readNodeExecutableVersion(),
+): CheckResult {
+  if (typeof raw !== 'string' && !raw.ok) {
+    return fail('Node.js version', raw.detail)
+  }
+
+  const versionCheck = checkSupportedNodeVersion(
+    typeof raw === 'string' ? raw : raw.version,
+  )
+  if (!versionCheck.ok) {
+    return fail('Node.js version', versionCheck.message)
+  }
+
+  return pass('Node.js version', versionCheck.version)
 }
 
 function checkBunRuntime(): CheckResult {
